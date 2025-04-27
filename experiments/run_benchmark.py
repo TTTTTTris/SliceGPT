@@ -78,8 +78,8 @@ def process_benchmarking_args(args: argparse.Namespace):
     for arg, argv in vars(args).items():
         logging.debug(f'{arg} = {argv}')
 
-    if not 0 <= args.sparsity < 1:
-        raise argparse.ArgumentTypeError(f"Sparsity should be in the range [0, 1)")
+    # if not 0 <= args.sparsity < 1:
+        # raise argparse.ArgumentTypeError(f"Sparsity should be in the range [0, 1)")
 
     if args.device:
         config.device = torch.device(args.device)
@@ -98,7 +98,9 @@ def benchmarking_main(args: argparse.Namespace) -> None:
     logging.info(f"Number of available cuda devices: {torch.cuda.device_count()}")
 
     try:
-        wandb.init(project=args.wandb_project, config=args, mode='disabled' if args.no_wandb else None)
+        wandb.init(project=args.wandb_project, 
+                   name=f"{args.sliced_model_path}",
+                   config=args, mode='disabled' if args.no_wandb else None)
     except wandb.UsageError as e:
         # wandb.init will throw an error if the user is not logged in and the process is running in a non-shell
         # environment, e.g. notebook, IDE, no-shell process, etc. In this case, we want to continue without wandb.
@@ -127,7 +129,7 @@ def benchmarking_main(args: argparse.Namespace) -> None:
     train_loader = data_utils.prepare_dataloader(
         dataset=dataset["train"],
         tokenizer=tokenizer,
-        max_seqlen=model_adapter.seqlen,
+        max_seqlen=256,
         batch_size=args.batch_size,
         nsamples=args.ntokens,
         seed=args.seed,

@@ -17,6 +17,7 @@ from lm_eval.tasks import initialize_tasks
 
 from slicegpt import gpu_utils, hf_utils, utils
 from slicegpt.config import config
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 TASK_METRIC_MAP = {
     "mmlu_abstract_algebra": "acc,none",
@@ -46,14 +47,14 @@ def eval_arg_parser(interactive: bool = True) -> argparse.Namespace:
         default="facebook/opt-125m",
         help="Model to load",
     )
-    path_group = parser.add_mutually_exclusive_group()
-    path_group.add_argument(
+    # path_group = parser.add_mutually_exclusive_group()
+    parser.add_argument(
         "--model-path",
         type=str,
         default=None,
         help="Path to load the model and tokenizer from (required for local models, not required for HF models)",
     )
-    path_group.add_argument(
+    parser.add_argument(
         "--sliced-model-path",
         type=str,
         help="Path to load the model to fine-tune (sliced) and tokenizer from",
@@ -136,13 +137,15 @@ def eval_main(args: argparse.Namespace) -> None:
     if args.sliced_model_path:
         # load the sliced model
         logging.info(f"Loading sliced {args.model} model from {args.sliced_model_path} with sparsity {args.sparsity}")
-        model_adapter, tokenizer = hf_utils.load_sliced_model(
-            args.model,
-            args.sliced_model_path,
-            sparsity=args.sparsity,
-            token=args.hf_token,
-            round_interval=args.round_interval,
-        )
+        # model_adapter, tokenizer = hf_utils.load_sliced_model(
+        #     args.model,
+        #     args.sliced_model_path,
+        #     sparsity=args.sparsity,
+        #     token=args.hf_token,
+        #     round_interval=args.round_interval,
+        # )
+        model_adapter = torch.load(args.sliced_model_path + args.model, weights_only=False)
+        tokenizer = AutoTokenizer.from_pretrained(args.model_path, use_fast=False)
     else:
         # load the original model
         logging.info(f"Loading {args.model} model")

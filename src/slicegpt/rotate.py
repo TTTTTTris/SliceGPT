@@ -2,6 +2,7 @@
 # Licensed under the MIT license.
 
 import logging
+from copy import deepcopy
 
 import numpy as np
 import torch
@@ -174,8 +175,15 @@ def rotate_and_slice_sequential(
     rotate_embeddings(model_adapter, Q)
     slice_embeddings(model_adapter, slicing_scheduler.get_embedding_dimensions())
 
+    logging.info(slicing_scheduler.get_embedding_dimensions()[0])
     logging.info("Rotate and slice layers")
     for idx, layer_adapter in enumerate(tqdm(layers, unit="layer", desc="Rotating and slicing")):
+        logging.info(idx)
+        logging.info(slicing_scheduler.get_attention_input_dimension(idx))
+        logging.info(slicing_scheduler.get_attention_output_dimension(idx, match_head_dim=False))
+        logging.info(slicing_scheduler.get_mlp_input_dimension(idx))
+        logging.info(slicing_scheduler.get_mlp_output_dimension(idx))
+
         layer = layer_adapter.layer
         layer.attn_shortcut_Q = nn.Parameter(Q.T.clone().to(dtype=dtype))
 
@@ -247,7 +255,8 @@ def rotate_and_slice_sequential(
         slice_head(model_adapter, slicing_scheduler.get_head_dimension())
 
     # update model's slicing config
-    model_adapter.slicing_conf = slicing_scheduler.slicing_conf.clone()
+    model_adapter.slicing_conf = deepcopy(slicing_scheduler.slicing_conf)
+    # model_adapter.slicing_conf = slicing_scheduler.slicing_conf.clone()
     logging.info("Rotate and slice layers done")
 
 

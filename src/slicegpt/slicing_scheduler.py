@@ -124,9 +124,10 @@ class SlicingScheduler(ABC):
 class ConfigSlicingScheduler(SlicingScheduler):
     """Slicing scheduler that returns the dimensions specified in the config."""
 
-    def __init__(self, config: SlicingConfig):
-        super().__init__()
+    def __init__(self, config: SlicingConfig, *, do_slice_head: bool = False):
+        super().__init__(do_slice_head=do_slice_head)
         self.slicing_conf = config
+        self.slicing_conf.do_slice_head = do_slice_head
 
     def _get_input_embedding_dimensions(self) -> dict[int, int]:
         return self.slicing_conf.embedding_dimensions

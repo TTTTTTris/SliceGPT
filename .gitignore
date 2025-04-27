@@ -5,6 +5,11 @@
 
 experiments/results*
 experiments/sliced_models
+experiments/tensorization/*
+bi/*
+experiments/src/*
+lib/*
+
 
 # logs
 log/

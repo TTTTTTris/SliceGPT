@@ -128,7 +128,8 @@ def load_sliced_model(
     The corresponding model adapter class must be imported before calling this method.
     """
     my_model_suffix = pathlib.Path(model_name).name
-    my_sliced_model_name = f"{my_model_suffix}_{sparsity}.pt"
+    sparsity = int(sparsity) if sparsity > 1 else sparsity
+    # my_sliced_model_name = f"{my_model_suffix}_{sparsity}"
     my_sliced_model_config = f"{my_model_suffix}_{sparsity}.json"
 
     model_adapter, tokenizer = get_model_and_tokenizer(
@@ -171,9 +172,8 @@ def load_sliced_model(
         model_adapter.model = get_peft_model(model_adapter.model, lora_config)
 
     logging.info(f"Loading sliced model weights from {sliced_model_path}")
-    model_adapter.model.load_state_dict(
-        torch.load(str(pathlib.Path(sliced_model_path) / my_sliced_model_name), map_location="cpu")
-    )
+    model_adapter._model = torch.load(str(pathlib.Path(sliced_model_path)), map_location="cpu")
+    
     model_adapter.model.eval()
 
     return model_adapter, tokenizer

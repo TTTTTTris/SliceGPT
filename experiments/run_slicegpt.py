@@ -12,8 +12,8 @@ import wandb
 
 from slicegpt import data_utils, gpu_utils, hf_utils, layernorm_fusion, rotate, utils
 from slicegpt.config import config
-from slicegpt.slicing_scheduler import ConstSlicingScheduler
-
+from slicegpt.slicing_scheduler import ConstSlicingScheduler, ConfigSlicingScheduler
+from slicegpt.model_adapter import SlicingConfig
 
 def slicing_arg_parser(interactive: bool = True) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -59,6 +59,11 @@ def slicing_arg_parser(interactive: bool = True) -> argparse.Namespace:
     parser.add_argument(
         "--sparsity", type=float, default=0.0, help="A measure of how much slicing is applied (in the range [0, 1))"
     )
+    parser.add_argument(
+        "--sparsity_score", type=list, default=None, help="A measure of how much slicing is applied (in the range [0, 1))"
+    )
+    parser.add_argument('--bi_score', type=str, default=None, help='bi score')
+
     parser.add_argument(
         "--round-interval",
         type=int,
@@ -110,6 +115,9 @@ def process_slicing_args(args):
 
     if not 0 <= args.sparsity < 1:
         raise argparse.ArgumentTypeError(f"Sparsity should be in the range [0, 1)")
+        
+    if args.bi_score != None:
+        args.sparsity_score = torch.load(args.bi_score + 'sparsity_score_' + str(args.sparsity) + '.pt')
 
     if args.device:
         config.device = torch.device(args.device)
@@ -221,37 +229,54 @@ def slicing_main(args: argparse.Namespace) -> None:
         f"New embedding dimension: {new_embedding_dimension} (sparsity {100*(1 - new_embedding_dimension / model_adapter.hidden_size):.4f} %)"
     )
 
-    scheduler = ConstSlicingScheduler(new_embedding_dimension)
+    if args.sparsity_score is not None:
+        new_embedding_dimension = {i: int(args.sparsity_score[i] * model_adapter.hidden_size) for i in range(len(args.sparsity_score))}
+        mlp_output_dimensions = {i: int(args.sparsity_score[i + 1] * model_adapter.hidden_size) for i in range(len(args.sparsity_score) - 1)}
+        mlp_output_dimensions[len(args.sparsity_score) - 1] = model_adapter.hidden_size  # Set the last layer's dimension
+
+        config.mlp_input_dimensions = new_embedding_dimension
+        config.mlp_output_dimensions = mlp_output_dimensions
+        config.attention_input_dimensions = new_embedding_dimension
+        config.attention_output_dimensions = new_embedding_dimension
+        config.embedding_dimensions = {0: new_embedding_dimension[0]}  # optional
+        config.head_dimension = new_embedding_dimension[max(new_embedding_dimension.keys())]         # optional
+        scheduler = ConfigSlicingScheduler(config)
+        print(config)
+        print(scheduler.do_slice_head)
+    else:
+        scheduler = ConstSlicingScheduler(new_embedding_dimension)
+
     rotate.rotate_and_slice(model_adapter, train_loader, scheduler, final_orientation=args.final_orientation)
 
     if args.save_dir:
-        sliced_model_dir = pathlib.Path(args.save_dir)
-        sliced_model_dir.mkdir(parents=True, exist_ok=True)
+        # sliced_model_dir = pathlib.Path(args.save_dir)
+        # sliced_model_dir.mkdir(parents=True, exist_ok=True)
 
-        sliced_model_name = sliced_model_dir / f'{pathlib.Path(args.model).name}_{args.sparsity}.pt'
+        sliced_model_name = args.save_dir
 
+        torch.save(model, sliced_model_name)
         # Save the sliced model
-        torch.save(model.state_dict(), sliced_model_name)
+        # torch.save(model.state_dict(), sliced_model_name)
 
-        # Save the slicing config
-        config_path = sliced_model_name.with_suffix('.json')
-        config_path.write_text(model_adapter.slicing_conf.to_json_string())
+        # # Save the slicing config
+        # config_path = sliced_model_name.with_suffix('.json')
+        # config_path.write_text(model_adapter.slicing_conf.to_json_string())
 
-        # If slicing a local model, also save HF config files in sliced model dir
-        if args.model_path:
-            try:
-                # copy all config files (tokenizer, model and slicing configs)
-                for file in pathlib.Path(args.model_path).glob("*.json"):
-                    if 'safetensors' not in str(file):
-                        shutil.copy(str(file), sliced_model_dir)
-                # copy all tokenizer models
-                for file in pathlib.Path(args.model_path).glob("*token*.model"):
-                    shutil.copy(str(file), sliced_model_dir)
-                # copy vocab merges if any
-                for file in pathlib.Path(args.model_path).glob("merges.txt"):
-                    shutil.copy(str(file), sliced_model_dir)
-            except OSError as e:
-                logging.info(f'Failed to copy configs and tokenizer files: {e}')
+        # # If slicing a local model, also save HF config files in sliced model dir
+        # if args.model_path:
+        #     try:
+        #         # copy all config files (tokenizer, model and slicing configs)
+        #         for file in pathlib.Path(args.model_path).glob("*.json"):
+        #             if 'safetensors' not in str(file):
+        #                 shutil.copy(str(file), sliced_model_dir)
+        #         # copy all tokenizer models
+        #         for file in pathlib.Path(args.model_path).glob("*token*.model"):
+        #             shutil.copy(str(file), sliced_model_dir)
+        #         # copy vocab merges if any
+        #         for file in pathlib.Path(args.model_path).glob("merges.txt"):
+        #             shutil.copy(str(file), sliced_model_dir)
+        #     except OSError as e:
+        #         logging.info(f'Failed to copy configs and tokenizer files: {e}')
 
         logging.info(f"Saved sliced model to {args.save_dir}")
 
