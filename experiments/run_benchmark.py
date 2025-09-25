@@ -48,6 +48,7 @@ def benchmarking_arg_parser(interactive: bool = True) -> argparse.Namespace:
         help="Number of tokens to benchmark over.",
         default=128,
     )
+    parser.add_argument("--seqlen", type=int, default=256, help="Sequence length for loading the calibration data.")
     parser.add_argument("--batch-size", type=int, default=1, help="Batch size for loading the calibration data.")
     parser.add_argument("--seed", type=int, default=42, help="Seed for sampling the calibration data.")
     parser.add_argument(
@@ -129,7 +130,7 @@ def benchmarking_main(args: argparse.Namespace) -> None:
     train_loader = data_utils.prepare_dataloader(
         dataset=dataset["train"],
         tokenizer=tokenizer,
-        max_seqlen=256,
+        max_seqlen=args.seqlen,
         batch_size=args.batch_size,
         nsamples=args.ntokens,
         seed=args.seed,

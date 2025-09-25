@@ -101,6 +101,14 @@ def benchmark(model_adapter: ModelAdapter, input_batch: torch.Tensor) -> dict:
     """Benchmark the model's latency and throughput on the given input batch."""
     model_adapter.use_cache = True
 
+    # # Compile the model for optimized inference
+    # model_adapter._model = torch.compile(
+    #     model_adapter.model,
+    #     mode="reduce-overhead",      # or "max-autotune" if you can afford longer compile time
+    #     fullgraph=False,             # or True if your model is clean enough (no weird dynamics)
+    #     dynamic=True                 # allow dynamic input sizes (torch 2.1+)
+    # )
+
     cache = {"past": None}
 
     def clear_past_cache(layer_idx):
@@ -120,24 +128,35 @@ def benchmark(model_adapter: ModelAdapter, input_batch: torch.Tensor) -> dict:
         batch_size, input_seq_len = input_ids.shape[:2]
         attention_mask = input_batch["attention_mask"]
         time_measurements = []
-
+        end_memory = 0
+        weight_memory = torch.cuda.memory_allocated()
         for i in tqdm(range(input_seq_len), desc="Benchmarking"):
             input_ids_i = input_ids[:, i].reshape((batch_size, 1)).to(config.device)
             attention_mask_i = attention_mask[:, : (i + 1)].to(config.device)
-
-            sync_gpus()
+            # sync_gpus()
+            torch.cuda.empty_cache()
+            start_memory = torch.cuda.memory_allocated()
+            torch.cuda.reset_peak_memory_stats(0)
+            torch.cuda.synchronize()
             start_time = time.time()
             output = model_adapter.model(input_ids_i, past_key_values=cache["past"], attention_mask=attention_mask_i)
-            sync_gpus()
+
+            # sync_gpus()
+            torch.cuda.synchronize()
             time_measurements.append(time.time() - start_time)
 
             cache["past"] = list(output.past_key_values)
+            end_memory = max(torch.cuda.max_memory_allocated(0), end_memory)
+
             del output
 
             input_ids_i, attention_mask_i = input_ids_i.to("cpu"), attention_mask_i.to("cpu")
 
         median_time = np.median(time_measurements)
         throughput = batch_size / median_time
-
-        results = {"median_time": median_time, "latency": 1 / throughput, "throughput": throughput}
+        print("Total Memory: {} GB".format(end_memory/(1024 ** 3)))
+        print("Weight Memory: {} GB".format(weight_memory/(1024 ** 3)))
+        print("Activation Memory: {} GB".format((end_memory - start_memory)/(1024 ** 3)))
+        results = {"median_time": median_time, "latency": 1 / throughput, "throughput": throughput, 
+                   "Total Memory": end_memory/(1024 ** 3), "Weight Memory": weight_memory/(1024 ** 3), "Activation Memory": (end_memory - start_memory)/(1024 ** 3)}
         return results

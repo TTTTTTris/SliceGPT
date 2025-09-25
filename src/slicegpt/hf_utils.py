@@ -172,7 +172,14 @@ def load_sliced_model(
         model_adapter.model = get_peft_model(model_adapter.model, lora_config)
 
     logging.info(f"Loading sliced model weights from {sliced_model_path}")
-    model_adapter._model = torch.load(str(pathlib.Path(sliced_model_path)), map_location="cpu")
+    model_adapter._model = torch.load(str(pathlib.Path(sliced_model_path)), map_location="cpu", weights_only=False)
+
+    # # Make all parameters and buffers contiguous
+    # with torch.no_grad():
+    #     for param in model_adapter.model.parameters():
+    #         param.copy_(param.contiguous())
+    #     for buffer in model_adapter.model.buffers():
+    #         buffer.copy_(buffer.contiguous())
     
     model_adapter.model.eval()
 
