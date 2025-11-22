@@ -134,6 +134,7 @@ def eff_eval(model, tokenizer, dataset='wikitext2', original_len=1, generated_le
     token_num = 0
     end_memory = 0
     # num_batches_to_fetch = 4
+    print(original_len, generated_len, batch_size)
     test_loader = get_test_data(dataset, tokenizer, seq_len=original_len, batch_size = batch_size)
     weight_memory = torch.cuda.memory_allocated()
     for batch_idx, batch_data in enumerate(itertools.islice(test_loader, 1)):
@@ -150,8 +151,9 @@ def eff_eval(model, tokenizer, dataset='wikitext2', original_len=1, generated_le
                 pad_token_id=tokenizer.eos_token_id,
                 do_sample=False,
                 use_cache=True,
+                max_new_tokens=generated_len,
                 # top_k=50,
-                max_length=original_len+generated_len,
+                # max_length=original_len+generated_len,
                 # top_p=0.95,
                 # temperature=1,
         )
@@ -429,5 +431,5 @@ if __name__ == "__main__":
     
     print(model)
 
-    model = torch.compile(model, mode="reduce-overhead")
+    # model = torch.compile(model, mode="reduce-overhead")
     eff_eval(model, tokenizer)
